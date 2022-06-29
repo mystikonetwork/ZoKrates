@@ -1,0 +1,100 @@
+name: build and test
+
+on:
+  push:
+    branches: ['develop', 'mystiko']
+  pull_request:
+    branches: ['*']
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    # env:
+    #  RUSTC_WRAPPER: "sccache"
+    #  SCCACHE_CACHE_SIZE: "1G"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Add rust component
+        run: |
+          rustc --version; cargo --version; rustup --version
+          rustup component add rustfmt
+          rustup component add clippy
+          sudo curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Install
+        run: |
+          sudo apt-get install -y pkg-config libssl-dev
+          sudo apt-get install libboost-all-dev
+          # sudo curl -o- -sSLf https://github.com/mozilla/sccache/releases/download/0.2.14/sccache-0.2.14-x86_64-unknown-linux-musl.tar.gz | tar xzf -
+          # sudo mkdir -p /usr/local/cargo/bin
+          # sudo mv sccache-0.2.14-x86_64-unknown-linux-musl/sccache /usr/local/cargo/bin/sccache
+      #- name: Restore sccache cache
+      #  uses: actions/cache@v3
+      #  with:
+      #      key: sccache-cache-stable-{{ arch }}-{{ .Environment.CIRCLE_JOB }}
+      - name: Build
+        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./build.sh
+      - name: Check format
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        timeout-minutes: 60
+        run: cargo clippy -j 4 -- -D warnings
+      - name: Run tests
+        timeout-minutes: 60
+        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./test.sh
+      - name: Cpp format
+        run: run-clang-format.py -r $(pwd)/zokrates_core/lib
+      - name: Wasm test
+        run: |
+          cd zokrates_core
+          wasm-pack test --firefox --headless -- --no-default-features --features "wasm ark"
+      - name: Run integration tests
+        timeout-minutes: 30
+        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./integration_test.sh
+      # - name: Save sccache cache
+      #   uses: actions/cache@v3
+      #   with:
+      #    key: sccache-cache-stable-{{ arch }}-{{ .Environment.CIRCLE_JOB }}-{{ epoch }}
+      #    paths: ~/.cache/sccache
+
+  build-and-test-js:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Add rust component
+        run: |
+          rustc --version; cargo --version; rustup --version
+          rustup component add rustfmt
+          rustup component add clippy
+      - name: Install
+        run: |
+          sudo apt-get install -y pkg-config libssl-dev
+          sudo apt-get install libboost-all-dev
+      - name: Zokrates js build
+        timeout-minutes: 30
+        run: |
+          cd zokrates_js
+          npm run build:dev && npm pack --dry-run
+      # Zokrates js test
+      - name: Zokrates js check format
+        run: |
+          cd zokrates_js
+          cargo fmt --all -- --check
+      - name: Zokrates js run clippy
+        run: |
+          cd zokrates_js
+          cargo clippy -- -D warnings
+      - name: Zokrates js run tests
+        timeout-minutes: 30
+        run: |
+          cd zokrates_js
+          npm run test

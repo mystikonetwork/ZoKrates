@@ -1,0 +1,127 @@
+name: deploy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    # necessary for windows
+    shell: bash
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # a list of all the targets
+        include:
+          - TARGET: aarch64-unknown-linux-gnu # tested on aws t4g.nano
+            OS: ubuntu-latest
+          - TARGET: arm-unknown-linux-gnueabihf # raspberry pi 0-1, not tested
+            OS: ubuntu-latest
+          - TARGET: x86_64-unknown-linux-gnu # tested in a debian container on a mac
+            OS: ubuntu-latest
+          - TARGET: x86_64-pc-windows-gnu # tested on a windows machine
+            OS: windows-latest
+            Boost: true
+          - TARGET: x86_64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
+            OS: macos-latest
+          - TARGET: aarch64-apple-darwin
+            OS: macos-latest
+    runs-on: ${{ matrix.OS }}
+    env:
+      NAME: zokrates
+      TARGET: ${{ matrix.TARGET }}
+      OS: ${{ matrix.OS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install and configure dependencies
+        run: |
+          # dependencies are only needed on ubuntu as that's the only place where
+          # we make cross-compilation
+          if [[ $OS =~ ^ubuntu.*$ ]]; then
+            sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
+          fi
+          if [[ $OS =~ ^macos.*$ ]]; then
+            brew install boost
+          fi
+          # some additional configuration for cross-compilation on linux
+          cat >>~/.cargo/config <<EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          [target.aarch64-unknown-linux-musl]
+          linker = "aarch64-linux-gnu-gcc"
+          [target.armv7-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          [target.armv7-unknown-linux-musleabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          [target.arm-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          [target.arm-unknown-linux-musleabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          EOF
+      - name: Install boost
+        if: matrix.Boost
+        uses: MarkusJx/install-boost@v2.3.0
+        id: install-boost
+        with:
+          # REQUIRED: Specify the required boost version
+          # A list of supported versions can be found here:
+          # https://github.com/actions/boost-versions/blob/main/versions-manifest.json
+          boost_version: 1.79.0
+          # OPTIONAL: Specify a custon install location
+          # boost_install_dir: C:\boost
+          # OPTIONAL: Specify a platform version
+          platform_version: 2019
+          # OPTIONAL: Specify a toolset
+          toolset: msvc
+          # NOTE: If a boost version matching all requirements cannot be found,
+          # this build step will fail
+      - name: Install rust target
+        run: rustup target add $TARGET
+      - name: Run build
+        timeout-minutes: 60
+        run: RUSTFLAGS="--remap-path-prefix=$PWD=" cargo build --package zokrates_cli --target $TARGET --release
+      - name: List target
+        run: find ./target
+      - name: Release meta
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      - name: Compress
+        run: |
+          mkdir -p ./artifacts
+          # windows is the only OS using a different convention for executable file name
+          if [[ $OS =~ ^windows.*$ ]]; then
+              EXEC=$NAME.exe
+          else
+              EXEC=$NAME
+          fi
+          mv ./target/$TARGET/release/$EXEC ./$EXEC
+          tar -czf ./artifacts/$NAME-${{ env.RELEASE_VERSION }}-$TARGET.tar.gz $EXEC
+      - name: Archive artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: result
+          path: |
+            ./artifacts
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: result
+          path: ./artifacts
+      - name: List
+        run: find ./artifacts
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./artifacts/*.tar.gz

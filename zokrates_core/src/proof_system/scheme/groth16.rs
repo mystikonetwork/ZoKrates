@@ -31,6 +31,7 @@ impl<T: Field> Scheme<T> for G16 {
 }
 
 impl<T: Field> NonUniversalScheme<T> for G16 {}
+
 impl<T: Field> MpcScheme<T> for G16 {}
 
 impl<T: SolidityCompatibleField> SolidityCompatibleScheme<T> for G16 {
@@ -94,10 +95,7 @@ impl<T: SolidityCompatibleField> SolidityCompatibleScheme<T> for G16 {
 
         // take input values as argument only if there are any
         template_text = if gamma_abc_count > 1 {
-            input_argument.replace(
-                template_text.as_str(),
-                format!(", uint[{}] memory input", gamma_abc_count - 1).as_str(),
-            )
+            input_argument.replace(template_text.as_str(), ", uint[] memory input")
         } else {
             input_argument.replace(template_text.as_str(), "")
         }
@@ -156,6 +154,17 @@ contract Verifier {
         uint256 snark_scalar_field = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
         VerifyingKey memory vk = verifyingKey();
         require(input.length + 1 == vk.gamma_abc.length);
+        require(proof.a.X < snark_scalar_field);
+        require(proof.a.Y < snark_scalar_field);
+        require(proof.b.X[0] < snark_scalar_field);
+        require(proof.b.Y[0] < snark_scalar_field);
+        require(proof.b.X[1] < snark_scalar_field);
+        require(proof.b.Y[1] < snark_scalar_field);
+        require(proof.c.X < snark_scalar_field);
+        require(proof.c.Y < snark_scalar_field);
+        require(Pairing.isOnCurve(proof.a));
+        require(Pairing.isOnCurve(proof.b));
+        require(Pairing.isOnCurve(proof.c));
         // Compute the linear combination vk_x
         Pairing.G1Point memory vk_x = Pairing.G1Point(0, 0);
         for (uint i = 0; i < input.length; i++) {
@@ -163,6 +172,7 @@ contract Verifier {
             vk_x = Pairing.addition(vk_x, Pairing.scalar_mul(vk.gamma_abc[i + 1], input[i]));
         }
         vk_x = Pairing.addition(vk_x, vk.gamma_abc[0]);
+        require(Pairing.isOnCurve(vk_x));
         if(!Pairing.pairingProd4(
              proof.a, proof.b,
              Pairing.negate(vk_x), vk.gamma,
@@ -173,9 +183,8 @@ contract Verifier {
     function verifyTx(
             Proof memory proof<%input_argument%>
         ) public view returns (bool r) {
-        uint[] memory inputValues = new uint[](<%vk_input_length%>);
-        <%input_loop%>
-        if (verify(inputValues, proof) == 0) {
+        require(input.length == <%vk_input_length%>, "invalid input length");
+        if (verify(input, proof) == 0) {
             return true;
         } else {
             return false;
