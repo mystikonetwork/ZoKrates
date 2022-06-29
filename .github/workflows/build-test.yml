@@ -46,8 +46,8 @@ jobs:
       - name: Run tests
         timeout-minutes: 60
         run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./test.sh
-      - name: Cpp format
-        run: run-clang-format.py -r $(pwd)/zokrates_core/lib
+      #- name: Cpp format
+      #  run: run-clang-format.py -r $(pwd)/zokrates_core/lib
       - name: Wasm test
         run: |
           cd zokrates_core

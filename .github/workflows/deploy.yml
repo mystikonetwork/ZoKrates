@@ -101,8 +101,9 @@ jobs:
           else
               EXEC=$NAME
           fi
-          mv ./target/$TARGET/release/$EXEC ./$EXEC
-          tar -czf ./artifacts/$NAME-${{ env.RELEASE_VERSION }}-$TARGET.tar.gz $EXEC
+          mv ./target/$TARGET/release/$EXEC $EXEC
+          cp -r zokrates_stdlib/stdlib .
+          tar -czf ./artifacts/$NAME-${{ env.RELEASE_VERSION }}-$TARGET.tar.gz  $EXEC ./stdlib
       - name: Archive artifact
         uses: actions/upload-artifact@v2
         with:
