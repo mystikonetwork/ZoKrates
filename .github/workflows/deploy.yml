@@ -18,18 +18,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # a list of all the targets
         include:
-          - TARGET: aarch64-unknown-linux-gnu # tested on aws t4g.nano
+          - TARGET: aarch64-unknown-linux-gnu
             OS: ubuntu-latest
-          - TARGET: arm-unknown-linux-gnueabihf # raspberry pi 0-1, not tested
+          - TARGET: arm-unknown-linux-gnueabihf
             OS: ubuntu-latest
-          - TARGET: x86_64-unknown-linux-gnu # tested in a debian container on a mac
+          - TARGET: x86_64-unknown-linux-gnu
             OS: ubuntu-latest
-          - TARGET: x86_64-pc-windows-gnu # tested on a windows machine
+          - TARGET: x86_64-pc-windows-gnu
             OS: windows-latest
             Boost: true
-          - TARGET: x86_64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
+          - TARGET: x86_64-apple-darwin
             OS: macos-latest
           - TARGET: aarch64-apple-darwin
             OS: macos-latest
