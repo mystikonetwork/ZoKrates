@@ -150,45 +150,38 @@ contract Verifier {
         vk.gamma_abc = new Pairing.G1Point[](<%vk_gamma_abc_length%>);
         <%vk_gamma_abc_pts%>
     }
-    function verify(uint[] memory input, Proof memory proof) internal view returns (uint) {
-        uint256 snark_scalar_field = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    function verify(uint[] memory input, Proof memory proof) internal view returns (bool) {
+        uint256 SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
         VerifyingKey memory vk = verifyingKey();
         require(input.length + 1 == vk.gamma_abc.length);
-        require(proof.a.X < snark_scalar_field);
-        require(proof.a.Y < snark_scalar_field);
-        require(proof.b.X[0] < snark_scalar_field);
-        require(proof.b.Y[0] < snark_scalar_field);
-        require(proof.b.X[1] < snark_scalar_field);
-        require(proof.b.Y[1] < snark_scalar_field);
-        require(proof.c.X < snark_scalar_field);
-        require(proof.c.Y < snark_scalar_field);
+        require(proof.a.X < SNARK_SCALAR_FIELD);
+        require(proof.a.Y < SNARK_SCALAR_FIELD);
+        require(proof.b.X[0] < SNARK_SCALAR_FIELD);
+        require(proof.b.Y[0] < SNARK_SCALAR_FIELD);
+        require(proof.b.X[1] < SNARK_SCALAR_FIELD);
+        require(proof.b.Y[1] < SNARK_SCALAR_FIELD);
+        require(proof.c.X < SNARK_SCALAR_FIELD);
+        require(proof.c.Y < SNARK_SCALAR_FIELD);
         require(Pairing.isOnCurve(proof.a));
         require(Pairing.isOnCurve(proof.b));
         require(Pairing.isOnCurve(proof.c));
         // Compute the linear combination vk_x
         Pairing.G1Point memory vk_x = Pairing.G1Point(0, 0);
         for (uint i = 0; i < input.length; i++) {
-            require(input[i] < snark_scalar_field);
+            require(input[i] < SNARK_SCALAR_FIELD);
             vk_x = Pairing.addition(vk_x, Pairing.scalar_mul(vk.gamma_abc[i + 1], input[i]));
         }
         vk_x = Pairing.addition(vk_x, vk.gamma_abc[0]);
         require(Pairing.isOnCurve(vk_x));
-        if(!Pairing.pairingProd4(
+        return Pairing.pairingProd4(
              proof.a, proof.b,
              Pairing.negate(vk_x), vk.gamma,
              Pairing.negate(proof.c), vk.delta,
-             Pairing.negate(vk.alpha), vk.beta)) return 1;
-        return 0;
+             Pairing.negate(vk.alpha), vk.beta);
     }
-    function verifyTx(
-            Proof memory proof<%input_argument%>
-        ) public view returns (bool r) {
+    function verifyTx(Proof memory proof<%input_argument%>) public view returns (bool) {
         require(input.length == <%vk_input_length%>, "invalid input length");
-        if (verify(input, proof) == 0) {
-            return true;
-        } else {
-            return false;
-        }
+        return verify(input, proof);
     }
 }
 "#;

@@ -419,10 +419,6 @@ pub fn solidity_pairing_lib(with_g2_addition: bool) -> String {
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 pragma solidity ^0.8.0;
 library Pairing {
-    uint256 internal constant FIELD_MODULUS = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
-    uint256 internal constant TWISTBX = 0x2b149d40ceb8aaae81be18991be06ac3b5b4c5e559dbefa33267e6dc24a138e5;
-    uint256 internal constant TWISTBY = 0x9713b03af0fed4cd2cafadeed8fdf4a74fa084e52d1852e4a2bd0685c315d2;
-
     struct G1Point {
         uint X;
         uint Y;
@@ -447,9 +443,10 @@ library Pairing {
     }
     /// @return the negation of p, i.e. p.addition(p.negate()) should be zero.
     function negate(G1Point memory p) pure internal returns (G1Point memory) {
+        uint256 FIELD_MODULUS = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
         if (p.Y == 0)
-            return G1Point(p.X, 0);
-        return G1Point(p.X, FIELD_MODULUS - (p.Y % FIELD_MODULUS));
+            return G1Point(p.X % FIELD_MODULUS, 0);
+        return G1Point(p.X % FIELD_MODULUS, FIELD_MODULUS - (p.Y % FIELD_MODULUS));
     }
     /// @return r the sum of two points of G1
     function addition(G1Point memory p1, G1Point memory p2) internal view returns (G1Point memory r) {
@@ -461,8 +458,7 @@ library Pairing {
         bool success;
         assembly {
             success := staticcall(sub(gas(), 2000), 6, input, 0xc0, r, 0x60)
-            // Use "invalid" to make gas estimation work
-            switch success case 0 { invalid() }
+            switch success case 0 { revert(0, 0) }
         }
         require(success);
     }
@@ -486,8 +482,7 @@ library Pairing {
         bool success;
         assembly {
             success := staticcall(sub(gas(), 2000), 7, input, 0x80, r, 0x60)
-            // Use "invalid" to make gas estimation work
-            switch success case 0 { invalid() }
+            switch success case 0 { revert(0, 0) }
         }
         require (success);
     }
@@ -495,39 +490,37 @@ library Pairing {
     /// e(p1[0], p2[0]) *  .... * e(p1[n], p2[n]) == 1
     /// For example pairing([P1(), P1().negate()], [P2(), P2()]) should
     /// return true.
-    function pairing(G1Point[] memory p1, G2Point[] memory p2) internal view returns (bool) {
-        require(p1.length == p2.length);
-        uint elements = p1.length;
-        uint inputSize = elements * 6;
-        uint[] memory input = new uint[](inputSize);
-        for (uint i = 0; i < elements; i++)
-        {
-            input[i * 6 + 0] = p1[i].X;
-            input[i * 6 + 1] = p1[i].Y;
-            input[i * 6 + 2] = p2[i].X[1];
-            input[i * 6 + 3] = p2[i].X[0];
-            input[i * 6 + 4] = p2[i].Y[1];
-            input[i * 6 + 5] = p2[i].Y[0];
-        }
+    function pairing(uint256[] memory input) internal view returns (bool) {
+        uint256 inputSize = input.length;
         uint[1] memory out;
         bool success;
         assembly {
             success := staticcall(sub(gas(), 2000), 8, add(input, 0x20), mul(inputSize, 0x20), out, 0x20)
-            // Use "invalid" to make gas estimation work
-            switch success case 0 { invalid() }
+            switch success case 0 { revert(0, 0) }
         }
         require(success);
         return out[0] != 0;
     }
     /// Convenience method for a pairing check for two pairs.
     function pairingProd2(G1Point memory a1, G2Point memory a2, G1Point memory b1, G2Point memory b2) internal view returns (bool) {
-        G1Point[] memory p1 = new G1Point[](2);
-        G2Point[] memory p2 = new G2Point[](2);
-        p1[0] = a1;
-        p1[1] = b1;
-        p2[0] = a2;
-        p2[1] = b2;
-        return pairing(p1, p2);
+        uint256 inputSize = 12;
+        uint256[] memory input = new uint256[](inputSize);
+
+        input[0] = a1.X;
+        input[1] = a1.Y;
+        input[2] = a2.X[1];
+        input[3] = a2.X[0];
+        input[4] = a2.Y[1];
+        input[5] = a2.Y[0];
+
+        input[6] = b1.X;
+        input[7] = b1.Y;
+        input[8] = b2.X[1];
+        input[9] = b2.X[0];
+        input[10] = b2.Y[1];
+        input[11] = b2.Y[0];
+
+        return pairing(input);
     }
     /// Convenience method for a pairing check for three pairs.
     function pairingProd3(
@@ -535,15 +528,31 @@ library Pairing {
             G1Point memory b1, G2Point memory b2,
             G1Point memory c1, G2Point memory c2
     ) internal view returns (bool) {
-        G1Point[] memory p1 = new G1Point[](3);
-        G2Point[] memory p2 = new G2Point[](3);
-        p1[0] = a1;
-        p1[1] = b1;
-        p1[2] = c1;
-        p2[0] = a2;
-        p2[1] = b2;
-        p2[2] = c2;
-        return pairing(p1, p2);
+        uint256 inputSize = 18;
+        uint256[] memory input = new uint256[](inputSize);
+
+        input[0] = a1.X;
+        input[1] = a1.Y;
+        input[2] = a2.X[1];
+        input[3] = a2.X[0];
+        input[4] = a2.Y[1];
+        input[5] = a2.Y[0];
+
+        input[6] = b1.X;
+        input[7] = b1.Y;
+        input[8] = b2.X[1];
+        input[9] = b2.X[0];
+        input[10] = b2.Y[1];
+        input[11] = b2.Y[0];
+
+        input[12] = c1.X;
+        input[13] = c1.Y;
+        input[14] = c2.X[1];
+        input[15] = c2.X[0];
+        input[16] = c2.Y[1];
+        input[17] = c2.Y[0];
+
+        return pairing(input);
     }
     /// Convenience method for a pairing check for four pairs.
     function pairingProd4(
@@ -552,17 +561,38 @@ library Pairing {
             G1Point memory c1, G2Point memory c2,
             G1Point memory d1, G2Point memory d2
     ) internal view returns (bool) {
-        G1Point[] memory p1 = new G1Point[](4);
-        G2Point[] memory p2 = new G2Point[](4);
-        p1[0] = a1;
-        p1[1] = b1;
-        p1[2] = c1;
-        p1[3] = d1;
-        p2[0] = a2;
-        p2[1] = b2;
-        p2[2] = c2;
-        p2[3] = d2;
-        return pairing(p1, p2);
+        uint256 inputSize = 24;
+        uint256[] memory input = new uint256[](inputSize);
+
+        input[0] = a1.X;
+        input[1] = a1.Y;
+        input[2] = a2.X[1];
+        input[3] = a2.X[0];
+        input[4] = a2.Y[1];
+        input[5] = a2.Y[0];
+
+        input[6] = b1.X;
+        input[7] = b1.Y;
+        input[8] = b2.X[1];
+        input[9] = b2.X[0];
+        input[10] = b2.Y[1];
+        input[11] = b2.Y[0];
+
+        input[12] = c1.X;
+        input[13] = c1.Y;
+        input[14] = c2.X[1];
+        input[15] = c2.X[0];
+        input[16] = c2.Y[1];
+        input[17] = c2.Y[0];
+
+        input[18] = d1.X;
+        input[19] = d1.Y;
+        input[20] = d2.X[1];
+        input[21] = d2.X[0];
+        input[22] = d2.Y[1];
+        input[23] = d2.Y[0];
+
+        return pairing(input);
     }
 
     function submod(
@@ -579,6 +609,7 @@ library Pairing {
         uint256 yx,
         uint256 yy
     ) internal pure returns (uint256, uint256) {
+        uint256 FIELD_MODULUS = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
         return (
           submod(mulmod(xx, yx, FIELD_MODULUS), mulmod(xy, yy, FIELD_MODULUS), FIELD_MODULUS),
           addmod(mulmod(xx, yy, FIELD_MODULUS), mulmod(xy, yx, FIELD_MODULUS), FIELD_MODULUS)
@@ -591,12 +622,15 @@ library Pairing {
         uint256 yx,
         uint256 yy
     ) internal pure returns (uint256 rx, uint256 ry) {
+        uint256 FIELD_MODULUS = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
         return (submod(xx, yx, FIELD_MODULUS), submod(xy, yy, FIELD_MODULUS));
     }
 
     function isOnCurve(
         G2Point memory p
     ) internal pure returns (bool) {
+        uint256 TWISTBX = 0x2b149d40ceb8aaae81be18991be06ac3b5b4c5e559dbefa33267e6dc24a138e5;
+        uint256 TWISTBY = 0x9713b03af0fed4cd2cafadeed8fdf4a74fa084e52d1852e4a2bd0685c315d2;
         uint256 yyx;
         uint256 yyy;
         uint256 xxxx;
@@ -610,6 +644,7 @@ library Pairing {
     }
 
     function isOnCurve(G1Point memory p) internal pure returns (bool) {
+        uint256 FIELD_MODULUS = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47;
         return mulmod(p.Y, p.Y, FIELD_MODULUS) - mulmod(mulmod(p.X, p.X, FIELD_MODULUS), p.X, FIELD_MODULUS) == 3 % FIELD_MODULUS;
     }
 }
