@@ -9,7 +9,7 @@ impl SolidityCompatibleField for Bn128Field {}
 pub trait SolidityCompatibleScheme<T: SolidityCompatibleField>: Scheme<T> {
     type Proof: From<Self::ProofPoints> + Serialize + DeserializeOwned + Clone;
 
-    fn export_solidity_verifier(vk: Self::VerificationKey) -> String;
+    fn export_solidity_verifier(vk: Self::VerificationKey) -> (String, String, String);
 }
 
 pub const SOLIDITY_G2_ADDITION_LIB: &str = r#"// SPDX-License-Identifier: LGPL-3.0-only

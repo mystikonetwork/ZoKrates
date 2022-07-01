@@ -42,9 +42,14 @@ impl<T: Field> NonUniversalScheme<T> for PGHR13 {}
 impl<T: SolidityCompatibleField> SolidityCompatibleScheme<T> for PGHR13 {
     type Proof = Self::ProofPoints;
 
-    fn export_solidity_verifier(vk: <PGHR13 as Scheme<T>>::VerificationKey) -> String {
-        let (mut template_text, solidity_pairing_lib) =
-            (String::from(CONTRACT_TEMPLATE), solidity_pairing_lib(false));
+    fn export_solidity_verifier(
+        vk: <PGHR13 as Scheme<T>>::VerificationKey,
+    ) -> (String, String, String) {
+        let (mut template_text, mut template_lib_text, solidity_pairing_lib) = (
+            String::from(CONTRACT_TEMPLATE),
+            String::from(CONTRACT_LIB_TEMPLATE),
+            solidity_pairing_lib(false),
+        );
 
         // replace things in template
         let vk_regex = Regex::new(r#"(<%vk_[^i%]*%>)"#).unwrap();
@@ -137,13 +142,24 @@ impl<T: SolidityCompatibleField> SolidityCompatibleScheme<T> for PGHR13 {
 
         let re = Regex::new(r"(?P<v>0[xX][0-9a-fA-F]{64})").unwrap();
         template_text = re.replace_all(&template_text, "uint256($v)").to_string();
+        template_lib_text = re
+            .replace_all(&template_lib_text, "uint256($v)")
+            .to_string();
 
-        format!("{}{}", solidity_pairing_lib, template_text)
+        (solidity_pairing_lib, template_text, template_lib_text)
     }
 }
 
-const CONTRACT_TEMPLATE: &str = r#"contract Verifier {
-    using Pairing for *;
+const CONTRACT_LIB_TEMPLATE: &str = r#"
+// This file is MIT Licensed.
+//
+// Copyright 2017 Christian Reitwiessner
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+pragma solidity ^0.8.0;
+import "./Pairing.sol";
+library VerifierLib {
     struct VerifyingKey {
         Pairing.G2Point a;
         Pairing.G1Point b;
@@ -164,7 +180,21 @@ const CONTRACT_TEMPLATE: &str = r#"contract Verifier {
         Pairing.G1Point h;
         Pairing.G1Point k;
     }
-    function verifyingKey() pure internal returns (VerifyingKey memory vk) {
+}
+"#;
+
+const CONTRACT_TEMPLATE: &str = r#"
+// This file is MIT Licensed.
+//
+// Copyright 2017 Christian Reitwiessner
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+pragma solidity ^0.8.0;
+import "./Pairing.sol";
+import "./VerifierLib.sol";
+contract Verifier {
+    function verifyingKey() pure internal returns (VerifierLib.VerifyingKey memory vk) {
         vk.a = Pairing.G2Point(<%vk_a%>);
         vk.b = Pairing.G1Point(<%vk_b%>);
         vk.c = Pairing.G2Point(<%vk_c%>);
@@ -175,9 +205,10 @@ const CONTRACT_TEMPLATE: &str = r#"contract Verifier {
         vk.ic = new Pairing.G1Point[](<%vk_ic_length%>);
         <%vk_ic_pts%>
     }
-    function verify(uint[] memory input, Proof memory proof) internal view returns (uint) {
+
+    function verify(uint[] memory input, VerifierLib.Proof memory proof) internal view returns (uint) {
         uint256 snark_scalar_field = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
-        VerifyingKey memory vk = verifyingKey();
+        VerifierLib.VerifyingKey memory vk = verifyingKey();
         require(input.length + 1 == vk.ic.length);
         // Compute the linear combination vk_x
         Pairing.G1Point memory vk_x = Pairing.G1Point(0, 0);
@@ -202,7 +233,7 @@ const CONTRACT_TEMPLATE: &str = r#"contract Verifier {
         return 0;
     }
     function verifyTx(
-            Proof memory proof<%input_argument%>
+            VerifierLib.Proof memory proof<%input_argument%>
         ) public view returns (bool r) {
         uint[] memory inputValues = new uint[](<%vk_input_length%>);
         <%input_loop%>

@@ -89,9 +89,14 @@ impl<T: Field> UniversalScheme<T> for Marlin {}
 impl<T: SolidityCompatibleField + NotBw6_761Field> SolidityCompatibleScheme<T> for Marlin {
     type Proof = SolidityProof<Fr, G1Affine>;
 
-    fn export_solidity_verifier(vk: <Marlin as Scheme<T>>::VerificationKey) -> String {
-        let (template, solidity_pairing_lib) =
-            (String::from(CONTRACT_TEMPLATE), solidity_pairing_lib(false));
+    fn export_solidity_verifier(
+        vk: <Marlin as Scheme<T>>::VerificationKey,
+    ) -> (String, String, String) {
+        let (template, template_lib, solidity_pairing_lib) = (
+            String::from(CONTRACT_TEMPLATE),
+            String::from(CONTRACT_LIB_TEMPLATE),
+            solidity_pairing_lib(false),
+        );
 
         // Replace public parameters in template
         let src = template
@@ -231,13 +236,20 @@ impl<T: SolidityCompatibleField + NotBw6_761Field> SolidityCompatibleScheme<T> f
             )
             .replace("<%f_inv%>", "0xc2e1f593efffffff");
 
-        format!("{}{}", solidity_pairing_lib, src)
+        (solidity_pairing_lib, src, template_lib)
     }
 }
 
-const CONTRACT_TEMPLATE: &str = r#"
-contract Verifier {
-    using Pairing for *;
+const CONTRACT_LIB_TEMPLATE: &str = r#"
+// This file is MIT Licensed.
+//
+// Copyright 2017 Christian Reitwiessner
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+pragma solidity ^0.8.0;
+import "./Pairing.sol";
+library VerifierLib {
     struct KZGVerifierKey {
         Pairing.G1Point g;
         Pairing.G1Point gamma_g;
@@ -263,7 +275,21 @@ contract Verifier {
         uint256 batch_lc_proof_1_r;
         Pairing.G1Point batch_lc_proof_2;
     }
-    function verifierKey() internal pure returns (VerifierKey memory vk) {
+}
+"#;
+
+const CONTRACT_TEMPLATE: &str = r#"
+// This file is MIT Licensed.
+//
+// Copyright 2017 Christian Reitwiessner
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+pragma solidity ^0.8.0;
+import "./Pairing.sol";
+import "./VerifierLib.sol";
+contract Verifier {
+    function verifierKey() internal pure returns (VerifierLib.VerifierKey memory vk) {
         vk.index_comms = new Pairing.G1Point[](<%vk_index_comms_length%>);
         <%vk_populate_index_comms%>
         vk.vk.g = Pairing.G1Point(<%vk_kzg_g%>);
@@ -274,8 +300,7 @@ contract Verifier {
         vk.g2_shift = Pairing.G1Point(<%vk_g2_shift%>);
     }
 
-    function verifyTx(Proof memory proof, uint256[<%num_public_inputs%>] memory input) public view returns (bool) {
-
+    function verifyTx(VerifierLib.Proof memory proof, uint256[<%num_public_inputs%>] memory input) public view returns (bool) {
         uint256[<%pub_padded_size%>] memory input_padded;
         for (uint i = 0; i < input.length; i++) {
             input_padded[i] = input[i];
@@ -284,8 +309,8 @@ contract Verifier {
         return verifyTxAux(input_padded, proof);
     }
 
-    function verifyTxAux(uint256[<%pub_padded_size%>] memory input, Proof memory proof) internal view returns (bool) {
-        VerifierKey memory vk = verifierKey();
+    function verifyTxAux(uint256[<%pub_padded_size%>] memory input, VerifierLib. memory proof) internal view returns (bool) {
+        VerifierLib.VerifierKey memory vk = verifierKey();
         for (uint i = 0; i < input.length; i++) {
             require(input[i] < <%f_mod%>);
         }

@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
+use std::process::exit;
 use zokrates_common::constants;
 use zokrates_common::helpers::{CurveParameter, SchemeParameter};
 use zokrates_core::proof_system::*;
@@ -94,19 +95,55 @@ fn cli_export_verifier<T: SolidityCompatibleField, S: SolidityCompatibleScheme<T
     let vk = serde_json::from_reader(reader)
         .map_err(|why| format!("Could not deserialize verification key: {}", why))?;
 
-    let verifier = S::export_solidity_verifier(vk);
+    let (pairing, verifier, verifier_lib) = S::export_solidity_verifier(vk);
 
     //write output file
-    let output_path = Path::new(sub_matches.value_of("output").unwrap());
-    let output_file = File::create(&output_path)
-        .map_err(|why| format!("Could not create {}: {}", output_path.display(), why))?;
+    let verifier_output_path = Path::new(sub_matches.value_of("output").unwrap());
+    let verifier_lib_output_path = verifier_output_path
+        .parent()
+        .unwrap()
+        .join("VerifierLib.sol");
+    let pairing_output_path = verifier_output_path.parent().unwrap().join("Pairing.sol");
 
+    // pairing sol
+    let pairing_output_file = File::create(&pairing_output_path).map_err(|why| {
+        format!(
+            "Could not create {}: {}",
+            pairing_output_path.display(),
+            why
+        )
+    })?;
+    let mut pairing_writer = BufWriter::new(pairing_output_file);
+    pairing_writer
+        .write_all(pairing.as_bytes())
+        .map_err(|_| "Failed writing pairing output to file".to_string())?;
+
+    // verifier lib sol
+    let output_lib_file = File::create(&verifier_lib_output_path).map_err(|why| {
+        format!(
+            "Could not create {}: {}",
+            verifier_lib_output_path.display(),
+            why
+        )
+    })?;
+    let mut lib_writer = BufWriter::new(output_lib_file);
+    lib_writer
+        .write_all(verifier_lib.as_bytes())
+        .map_err(|_| "Failed writing verifier lib output to file".to_string())?;
+
+    // verifier sol
+    let output_file = File::create(&verifier_output_path).map_err(|why| {
+        format!(
+            "Could not create {}: {}",
+            verifier_output_path.display(),
+            why
+        )
+    })?;
     let mut writer = BufWriter::new(output_file);
-
     writer
         .write_all(verifier.as_bytes())
-        .map_err(|_| "Failed writing output to file".to_string())?;
+        .map_err(|_| "Failed writing verifier output to file".to_string())?;
 
-    println!("Verifier exported to '{}'", output_path.display());
+    println!("Verifier exported to '{}'", verifier_output_path.display());
     Ok(())
 }
