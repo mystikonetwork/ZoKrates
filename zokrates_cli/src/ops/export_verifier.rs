@@ -4,7 +4,6 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
-use std::process::exit;
 use zokrates_common::constants;
 use zokrates_common::helpers::{CurveParameter, SchemeParameter};
 use zokrates_core::proof_system::*;

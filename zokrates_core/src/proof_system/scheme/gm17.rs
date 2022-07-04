@@ -198,7 +198,7 @@ contract Verifier {
         vk.query = new Pairing.G1Point[](<%vk_query_length%>);
         <%vk_query_pts%>
     }
-    function verify(uint[] memory input, VerifierLib.Proof memory proof) internal view returns (uint) {
+    function verify(uint[] memory input, VerifierLib.Proof memory proof) internal view returns (bool) {
         uint256 snark_scalar_field = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
         VerifierLib.VerifyingKey memory vk = verifyingKey();
         require(input.length + 1 == vk.query.length);
@@ -214,23 +214,18 @@ contract Verifier {
          *                              * e(C, H)
          * where psi = \sum_{i=0}^l input_i pvk.query[i]
          */
-        if (!Pairing.pairingProd4(vk.g_alpha, vk.h_beta, vk_x, vk.h_gamma, proof.c, vk.h, Pairing.negate(Pairing.addition(proof.a, vk.g_alpha)), Pairing.addition(proof.b, vk.h_beta))) return 1;
+        if (!Pairing.pairingProd4(vk.g_alpha, vk.h_beta, vk_x, vk.h_gamma, proof.c, vk.h, Pairing.negate(Pairing.addition(proof.a, vk.g_alpha)), Pairing.addition(proof.b, vk.h_beta))) return false;
         /**
          * e(A, H^{gamma}) = e(G^{gamma}, B)
          */
-        if (!Pairing.pairingProd2(proof.a, vk.h_gamma, Pairing.negate(vk.g_gamma), proof.b)) return 2;
-        return 0;
+        if (!Pairing.pairingProd2(proof.a, vk.h_gamma, Pairing.negate(vk.g_gamma), proof.b)) return false;
+        return true;
     }
     function verifyTx(
             VerifierLib.Proof memory proof<%input_argument%>
-        ) public view returns (bool r) {
-        uint[] memory inputValues = new uint[](<%vk_input_length%>);
-        <%input_loop%>
-        if (verify(inputValues, proof) == 0) {
-            return true;
-        } else {
-            return false;
-        }
+        ) public view returns (bool) {
+        require(input.length == <%vk_input_length%>, "invalid input length");
+        return verify(input, proof);
     }
 }
 "#;

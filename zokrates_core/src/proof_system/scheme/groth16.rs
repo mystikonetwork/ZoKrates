@@ -161,7 +161,6 @@ library VerifierLib {
         Pairing.G2Point b;
         Pairing.G1Point c;
     }
-
 }
 "#;
 

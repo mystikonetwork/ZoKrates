@@ -11,6 +11,7 @@ mod integration {
     use fs_extra::copy_items;
     use fs_extra::dir::CopyOptions;
     use primitive_types::U256;
+    use regex::Regex;
     use serde_json::from_reader;
     use std::fs;
     use std::fs::File;
@@ -105,6 +106,14 @@ mod integration {
             .join(program_name)
             .join("proving")
             .with_extension("key");
+        let verification_pairing_contract_path = tmp_base
+            .join(program_name)
+            .join("Pairing")
+            .with_extension("sol");
+        let verification_lib_contract_path = tmp_base
+            .join(program_name)
+            .join("VerifierLib")
+            .with_extension("sol");
         let verification_contract_path = tmp_base
             .join(program_name)
             .join("verifier")
@@ -324,9 +333,17 @@ mod integration {
 
                     // TEST VERIFIER
                     // Get the contract
-                    let contract_str =
+                    let pairing_str = std::fs::read_to_string(
+                        verification_pairing_contract_path.to_str().unwrap(),
+                    )
+                    .unwrap();
+                    let lib_str =
+                        std::fs::read_to_string(verification_lib_contract_path.to_str().unwrap())
+                            .unwrap();
+                    let mut contract_str =
                         std::fs::read_to_string(verification_contract_path.to_str().unwrap())
                             .unwrap();
+
                     match *scheme {
                         "marlin" => {
                             // Get the proof
@@ -334,7 +351,12 @@ mod integration {
                                 File::open(proof_path.to_str().unwrap()).unwrap(),
                             )
                             .unwrap();
-
+                            contract_str = joining_solidity_verifier(
+                                pairing_str,
+                                lib_str,
+                                contract_str,
+                                proof.inputs.len(),
+                            );
                             test_solidity_verifier(contract_str, proof);
                         }
                         "g16" => {
@@ -343,7 +365,12 @@ mod integration {
                                 File::open(proof_path.to_str().unwrap()).unwrap(),
                             )
                             .unwrap();
-
+                            contract_str = joining_solidity_verifier(
+                                pairing_str,
+                                lib_str,
+                                contract_str,
+                                proof.inputs.len(),
+                            );
                             test_solidity_verifier(contract_str, proof);
                         }
                         "gm17" => {
@@ -352,7 +379,12 @@ mod integration {
                                 File::open(proof_path.to_str().unwrap()).unwrap(),
                             )
                             .unwrap();
-
+                            contract_str = joining_solidity_verifier(
+                                pairing_str,
+                                lib_str,
+                                contract_str,
+                                proof.inputs.len(),
+                            );
                             test_solidity_verifier(contract_str, proof);
                         }
                         "pghr13" => {
@@ -361,7 +393,12 @@ mod integration {
                                 File::open(proof_path.to_str().unwrap()).unwrap(),
                             )
                             .unwrap();
-
+                            contract_str = joining_solidity_verifier(
+                                pairing_str,
+                                lib_str,
+                                contract_str,
+                                proof.inputs.len(),
+                            );
                             test_solidity_verifier(contract_str, proof);
                         }
                         _ => unreachable!(),
@@ -369,6 +406,34 @@ mod integration {
                 }
             }
         }
+    }
+
+    fn joining_solidity_verifier(
+        pairing: String,
+        verifier_lib: String,
+        verifier: String,
+        input_size: usize,
+    ) -> String {
+        let rs = Regex::new(r#"(pragma solidity .......)"#).unwrap();
+        let rp = Regex::new(r#"(import "./Pairing.sol";)"#).unwrap();
+        let rl = Regex::new(r#"(import "./VerifierLib.sol";)"#).unwrap();
+        let ra = Regex::new(r#"(uint.. memory input)"#).unwrap();
+
+        let mut verifier_lib_replace = rs.replace_all(&verifier_lib, "").to_string();
+        verifier_lib_replace = rp.replace_all(&verifier_lib_replace, "").to_string();
+
+        let mut verifier_replace = rs.replace_all(&verifier, "").to_string();
+        verifier_replace = rp.replace_all(&verifier_replace, "").to_string();
+        verifier_replace = rl.replace_all(&verifier_replace, "").to_string();
+
+        verifier_replace = ra
+            .replace_all(
+                &verifier_replace,
+                format!("uint[{}] memory input", input_size).as_str(),
+            )
+            .to_string();
+
+        format!("{}{}{}", pairing, verifier_lib_replace, verifier_replace)
     }
 
     fn test_solidity_verifier<S: SolidityCompatibleScheme<Bn128Field> + ToToken<Bn128Field>>(
@@ -465,7 +530,7 @@ mod integration {
             )
             .unwrap();
 
-        assert_eq!(result.op_out, Return::InvalidOpcode);
+        assert_eq!(result.op_out, Return::Revert);
     }
 
     fn test_compile_and_smtlib2(

@@ -324,7 +324,7 @@ pub fn export_solidity_verifier(vk: JsValue, options: JsValue) -> Result<JsValue
     )
     .map_err(|e| JsValue::from_str(&e))?;
 
-    let verifier = match (curve, scheme) {
+    let (_, verifier, _) = match (curve, scheme) {
         (CurveParameter::Bn128, SchemeParameter::G16) => Ok(<G16 as SolidityCompatibleScheme<
             Bn128Field,
         >>::export_solidity_verifier(

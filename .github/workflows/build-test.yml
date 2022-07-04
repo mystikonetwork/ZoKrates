@@ -7,7 +7,7 @@ on:
     branches: ['*']
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
     # env:
     #  RUSTC_WRAPPER: "sccache"
@@ -24,7 +24,6 @@ jobs:
           rustc --version; cargo --version; rustup --version
           rustup component add rustfmt
           rustup component add clippy
-          sudo curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Install
         run: |
           sudo apt-get install -y pkg-config libssl-dev
@@ -43,23 +42,64 @@ jobs:
       - name: Run clippy
         timeout-minutes: 60
         run: cargo clippy -j 4 -- -D warnings
-      - name: Run tests
-        timeout-minutes: 60
-        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./test.sh
       #- name: Cpp format
       #  run: run-clang-format.py -r $(pwd)/zokrates_core/lib
-      - name: Wasm test
-        run: |
-          cd zokrates_core
-          wasm-pack test --firefox --headless -- --no-default-features --features "wasm ark"
-      - name: Run integration tests
-        timeout-minutes: 30
-        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./integration_test.sh
       # - name: Save sccache cache
       #   uses: actions/cache@v3
       #   with:
       #    key: sccache-cache-stable-{{ arch }}-{{ .Environment.CIRCLE_JOB }}-{{ epoch }}
       #    paths: ~/.cache/sccache
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install
+        run: |
+          sudo apt-get install -y pkg-config libssl-dev
+          sudo apt-get install libboost-all-dev
+      - name: Run tests
+        timeout-minutes: 60
+        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./test.sh
+
+  integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install
+        run: |
+          sudo apt-get install -y pkg-config libssl-dev
+          sudo apt-get install libboost-all-dev
+      - name: Run integration tests
+        timeout-minutes: 60
+        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./integration_test.sh
+
+  wasm-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Add rust component
+        run: |
+          sudo curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Wasm test
+        run: |
+          cd zokrates_core
+          wasm-pack test --firefox --headless -- --no-default-features --features "wasm ark"
 
   build-and-test-js:
     runs-on: ubuntu-latest

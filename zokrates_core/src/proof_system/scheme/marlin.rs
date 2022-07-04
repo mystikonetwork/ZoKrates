@@ -289,6 +289,8 @@ pragma solidity ^0.8.0;
 import "./Pairing.sol";
 import "./VerifierLib.sol";
 contract Verifier {
+    using Pairing for *;
+
     function verifierKey() internal pure returns (VerifierLib.VerifierKey memory vk) {
         vk.index_comms = new Pairing.G1Point[](<%vk_index_comms_length%>);
         <%vk_populate_index_comms%>
@@ -309,7 +311,7 @@ contract Verifier {
         return verifyTxAux(input_padded, proof);
     }
 
-    function verifyTxAux(uint256[<%pub_padded_size%>] memory input, VerifierLib. memory proof) internal view returns (bool) {
+    function verifyTxAux(uint256[<%pub_padded_size%>] memory input, VerifierLib.Proof memory proof) internal view returns (bool) {
         VerifierLib.VerifierKey memory vk = verifierKey();
         for (uint i = 0; i < input.length; i++) {
             require(input[i] < <%f_mod%>);
