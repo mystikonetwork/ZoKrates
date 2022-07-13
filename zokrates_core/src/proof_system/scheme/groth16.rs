@@ -149,7 +149,7 @@ const CONTRACT_LIB_TEMPLATE: &str = r#"
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.7;
 import "./Pairing.sol";
 library VerifierLib {
     struct VerifyingKey {
@@ -174,7 +174,7 @@ const CONTRACT_TEMPLATE: &str = r#"
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.7;
 import "./Pairing.sol";
 import "./VerifierLib.sol";
 contract Verifier {
@@ -187,27 +187,26 @@ contract Verifier {
         <%vk_gamma_abc_pts%>
     }
     function verify(uint[] memory input, VerifierLib.Proof memory proof) internal view returns (bool) {
-        uint256 SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+        uint256 fieldSize = Pairing.FIELD_SIZE;
         VerifierLib.VerifyingKey memory vk = verifyingKey();
         require(input.length + 1 == vk.gamma_abc.length);
-        require(proof.a.X < SNARK_SCALAR_FIELD);
-        require(proof.a.Y < SNARK_SCALAR_FIELD);
-        require(proof.b.X[0] < SNARK_SCALAR_FIELD);
-        require(proof.b.Y[0] < SNARK_SCALAR_FIELD);
-        require(proof.b.X[1] < SNARK_SCALAR_FIELD);
-        require(proof.b.Y[1] < SNARK_SCALAR_FIELD);
-        require(proof.c.X < SNARK_SCALAR_FIELD);
-        require(proof.c.Y < SNARK_SCALAR_FIELD);
+        require(proof.a.X < fieldSize);
+        require(proof.a.Y < fieldSize);
+        require(proof.b.X[0] < fieldSize);
+        require(proof.b.Y[0] < fieldSize);
+        require(proof.b.X[1] < fieldSize);
+        require(proof.b.Y[1] < fieldSize);
+        require(proof.c.X < fieldSize);
+        require(proof.c.Y < fieldSize);
         require(Pairing.isOnCurve(proof.a));
         require(Pairing.isOnCurve(proof.b));
         require(Pairing.isOnCurve(proof.c));
         // Compute the linear combination vk_x
-        Pairing.G1Point memory vk_x = Pairing.G1Point(0, 0);
+        Pairing.G1Point memory vk_x = Pairing.addition(Pairing.G1Point(0, 0), vk.gamma_abc[0]);
         for (uint i = 0; i < input.length; i++) {
-            require(input[i] < SNARK_SCALAR_FIELD);
+            require(input[i] < fieldSize);
             vk_x = Pairing.addition(vk_x, Pairing.scalar_mul(vk.gamma_abc[i + 1], input[i]));
         }
-        vk_x = Pairing.addition(vk_x, vk.gamma_abc[0]);
         require(Pairing.isOnCurve(vk_x));
         return Pairing.pairingProd4(
              proof.a, proof.b,
