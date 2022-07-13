@@ -64,7 +64,7 @@ jobs:
           sudo apt-get install -y pkg-config libssl-dev
           sudo apt-get install libboost-all-dev
       - name: Run tests
-        timeout-minutes: 60
+        timeout-minutes: 90
         run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./test.sh
 
   integration-test:
@@ -81,7 +81,7 @@ jobs:
           sudo apt-get install -y pkg-config libssl-dev
           sudo apt-get install libboost-all-dev
       - name: Run integration tests
-        timeout-minutes: 60
+        timeout-minutes: 90
         run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./integration_test.sh
 
   wasm-test:
