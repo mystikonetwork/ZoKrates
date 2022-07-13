@@ -419,6 +419,8 @@ pub fn solidity_pairing_lib(with_g2_addition: bool) -> String {
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 pragma solidity ^0.8.7;
 library Pairing {
+    error StaticCallFailed();
+
     uint256 constant FIELD_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     uint256 internal constant FIELD_MODULUS = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
     uint256 internal constant BN_N = 3;
@@ -466,7 +468,7 @@ library Pairing {
             success := staticcall(sub(gas(), 2000), 6, input, 0xc0, r, 0x60)
             switch success case 0 { revert(0, 0) }
         }
-        require(success);
+        if (!success) revert StaticCallFailed();
     }
 "#;
 
@@ -490,7 +492,7 @@ library Pairing {
             success := staticcall(sub(gas(), 2000), 7, input, 0x80, r, 0x60)
             switch success case 0 { revert(0, 0) }
         }
-        require (success);
+        if (!success) revert StaticCallFailed();
     }
     /// @return the result of computing the pairing check
     /// e(p1[0], p2[0]) *  .... * e(p1[n], p2[n]) == 1
@@ -504,7 +506,7 @@ library Pairing {
             success := staticcall(sub(gas(), 2000), 8, add(input, 0x20), mul(inputSize, 0x20), out, 0x20)
             switch success case 0 { revert(0, 0) }
         }
-        require(success);
+        if (!success) revert StaticCallFailed();
         return out[0] != 0;
     }
     /// Convenience method for a pairing check for two pairs.

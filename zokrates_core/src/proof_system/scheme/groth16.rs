@@ -152,6 +152,9 @@ const CONTRACT_LIB_TEMPLATE: &str = r#"
 pragma solidity ^0.8.7;
 import "./Pairing.sol";
 library VerifierLib {
+    error InvalidParam();
+    error NotOnCurve();
+
     struct VerifyingKey {
         Pairing.G1Point alpha;
         Pairing.G2Point beta;
@@ -189,25 +192,25 @@ contract Verifier {
     function verify(uint[] memory input, VerifierLib.Proof memory proof) internal view returns (bool) {
         uint256 fieldSize = Pairing.FIELD_SIZE;
         VerifierLib.VerifyingKey memory vk = verifyingKey();
-        require(input.length + 1 == vk.gamma_abc.length);
-        require(proof.a.X < fieldSize);
-        require(proof.a.Y < fieldSize);
-        require(proof.b.X[0] < fieldSize);
-        require(proof.b.Y[0] < fieldSize);
-        require(proof.b.X[1] < fieldSize);
-        require(proof.b.Y[1] < fieldSize);
-        require(proof.c.X < fieldSize);
-        require(proof.c.Y < fieldSize);
-        require(Pairing.isOnCurve(proof.a));
-        require(Pairing.isOnCurve(proof.b));
-        require(Pairing.isOnCurve(proof.c));
+        if (input.length + 1 != vk.gamma_abc.length) revert VerifierLib.InvalidParam();
+        if (proof.a.X >= fieldSize) revert VerifierLib.InvalidParam();
+        if (proof.a.Y >= fieldSize) revert VerifierLib.InvalidParam();
+        if (proof.b.X[0] >= fieldSize) revert VerifierLib.InvalidParam();
+        if (proof.b.Y[0] >= fieldSize) revert VerifierLib.InvalidParam();
+        if (proof.b.X[1] >= fieldSize) revert VerifierLib.InvalidParam();
+        if (proof.b.Y[1] >= fieldSize) revert VerifierLib.InvalidParam();
+        if (proof.c.X >= fieldSize) revert VerifierLib.InvalidParam();
+        if (proof.c.Y >= fieldSize) revert VerifierLib.InvalidParam();
+        if (!Pairing.isOnCurve(proof.a)) revert VerifierLib.NotOnCurve();
+        if (!Pairing.isOnCurve(proof.b)) revert VerifierLib.NotOnCurve();
+        if (!Pairing.isOnCurve(proof.c)) revert VerifierLib.NotOnCurve();
         // Compute the linear combination vk_x
         Pairing.G1Point memory vk_x = Pairing.addition(Pairing.G1Point(0, 0), vk.gamma_abc[0]);
         for (uint i = 0; i < input.length; i++) {
-            require(input[i] < fieldSize);
+            if (input[i] >= fieldSize) revert VerifierLib.InvalidParam();
             vk_x = Pairing.addition(vk_x, Pairing.scalar_mul(vk.gamma_abc[i + 1], input[i]));
         }
-        require(Pairing.isOnCurve(vk_x));
+        if (!Pairing.isOnCurve(vk_x)) revert VerifierLib.NotOnCurve();
         return Pairing.pairingProd4(
              proof.a, proof.b,
              Pairing.negate(vk_x), vk.gamma,
@@ -215,7 +218,7 @@ contract Verifier {
              Pairing.negate(vk.alpha), vk.beta);
     }
     function verifyTx(VerifierLib.Proof memory proof<%input_argument%>) public view returns (bool r) {
-        require(input.length == <%vk_input_length%>, "invalid input length");
+        if (input.length != <%vk_input_length%>) revert VerifierLib.InvalidParam();
         return verify(input, proof);
     }
 }
