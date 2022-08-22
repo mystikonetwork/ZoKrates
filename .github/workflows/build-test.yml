@@ -36,7 +36,7 @@ jobs:
       #  with:
       #      key: sccache-cache-stable-{{ arch }}-{{ .Environment.CIRCLE_JOB }}
       - name: Build
-        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./build.sh
+        run: RUSTFLAGS="-D warnings" ./build.sh
       - name: Check format
         run: cargo fmt --all -- --check
       - name: Run clippy
@@ -65,7 +65,7 @@ jobs:
           sudo apt-get install libboost-all-dev
       - name: Run tests
         timeout-minutes: 90
-        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./test.sh
+        run: RUSTFLAGS="-D warnings" ./test.sh
 
   integration-test:
     runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ jobs:
           sudo apt-get install libboost-all-dev
       - name: Run integration tests
         timeout-minutes: 90
-        run: WITH_LIBSNARK=1 RUSTFLAGS="-D warnings" ./integration_test.sh
+        run: RUSTFLAGS="-D warnings" ./integration_test.sh
 
   wasm-test:
     runs-on: ubuntu-latest
@@ -98,8 +98,8 @@ jobs:
           sudo curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Wasm test
         run: |
-          cd zokrates_core
-          wasm-pack test --firefox --headless -- --no-default-features --features "wasm ark"
+          cd zokrates_test
+          wasm-pack test --firefox --headless
 
   build-and-test-js:
     runs-on: ubuntu-latest
