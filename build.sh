@@ -3,4 +3,4 @@
 # Exit if any subcommand fails
 set -e
 
-cargo build --package zokrates_cli
+cargo build --release --package zokrates_cli

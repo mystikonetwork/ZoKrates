@@ -4,6 +4,7 @@ extern crate primitive_types;
 extern crate rand_0_4;
 extern crate rand_0_8;
 extern crate serde_json;
+extern crate zokrates_solidity_test;
 
 #[cfg(test)]
 mod integration {
@@ -541,11 +542,7 @@ mod integration {
     }
 
     fn test_solidity_verifier<S: SolidityCompatibleScheme<Bn128Field> + ToToken<Bn128Field>>(
-        program_name: &str,
-        backend: &str,
-        scheme: &str,
-        solidity_test_path: &Path,
-        contract_str: &str,
+        src: String,
         proof: Proof<Bn128Field, S>,
     ) {
         use ethabi::Token;
