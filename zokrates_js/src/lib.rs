@@ -488,8 +488,8 @@ mod internal {
     ) -> Result<JsValue, JsValue> {
         let vk: S::VerificationKey =
             serde_json::from_value(vk).map_err(|err| JsValue::from_str(&format!("{}", err)))?;
-
-        Ok(JsValue::from_str(&S::export_solidity_verifier(vk)))
+        let (_, verifier, _) = &S::export_solidity_verifier(vk);
+        Ok(JsValue::from_str(verifier.as_str()))
     }
 }
 
