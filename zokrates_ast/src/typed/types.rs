@@ -1,5 +1,6 @@
+use crate::common::expressions::ValueExpression;
 use crate::typed::{
-    CoreIdentifier, Identifier, OwnedTypedModuleId, TypedExpression, UExpression, UExpressionInner,
+    CoreIdentifier, Identifier, OwnedModuleId, TypedExpression, UExpression, UExpressionInner,
 };
 use crate::typed::{TryFrom, TryInto};
 use serde::{de::Error, ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
@@ -7,38 +8,39 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use zokrates_field::Field;
 
-pub trait IntoType<'ast, T> {
-    fn into_type(self) -> Type<'ast, T>;
+pub trait IntoType<S> {
+    fn into_type(self) -> GType<S>;
 }
 
-impl<'ast, T> IntoType<'ast, T> for Type<'ast, T> {
-    fn into_type(self) -> Type<'ast, T> {
+impl<S> IntoType<S> for GType<S> {
+    fn into_type(self) -> GType<S> {
         self
     }
 }
 
-impl<'ast, T> IntoType<'ast, T> for StructType<'ast, T> {
-    fn into_type(self) -> Type<'ast, T> {
-        Type::Struct(self)
+impl<S> IntoType<S> for GStructType<S> {
+    fn into_type(self) -> GType<S> {
+        GType::Struct(self)
     }
 }
 
-impl<'ast, T> IntoType<'ast, T> for ArrayType<'ast, T> {
-    fn into_type(self) -> Type<'ast, T> {
-        Type::Array(self)
+impl<S> IntoType<S> for GArrayType<S> {
+    fn into_type(self) -> GType<S> {
+        GType::Array(self)
     }
 }
 
-impl<'ast, T> IntoType<'ast, T> for TupleType<'ast, T> {
-    fn into_type(self) -> Type<'ast, T> {
-        Type::Tuple(self)
+impl<S> IntoType<S> for GTupleType<S> {
+    fn into_type(self) -> GType<S> {
+        GType::Tuple(self)
     }
 }
 
-impl<'ast, T> IntoType<'ast, T> for UBitwidth {
-    fn into_type(self) -> Type<'ast, T> {
-        Type::Uint(self)
+impl<S> IntoType<S> for UBitwidth {
+    fn into_type(self) -> GType<S> {
+        GType::Uint(self)
     }
 }
 
@@ -46,6 +48,16 @@ impl<'ast, T> IntoType<'ast, T> for UBitwidth {
 pub struct GenericIdentifier<'ast> {
     name: Option<&'ast str>,
     index: usize,
+}
+
+impl<'ast> From<GenericIdentifier<'ast>> for CoreIdentifier<'ast> {
+    fn from(g: GenericIdentifier<'ast>) -> CoreIdentifier<'ast> {
+        // generic identifiers are always declared in the function scope, which is shadow 0
+        CoreIdentifier::Source(ShadowedIdentifier::shadow(
+            std::borrow::Cow::Borrowed(g.name()),
+            0,
+        ))
+    }
 }
 
 impl<'ast> GenericIdentifier<'ast> {
@@ -112,9 +124,10 @@ pub struct SpecializationError;
 
 pub type ConstantIdentifier<'ast> = &'ast str;
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CanonicalConstantIdentifier<'ast> {
-    pub module: OwnedTypedModuleId,
+    pub module: OwnedModuleId,
+    #[serde(borrow)]
     pub id: ConstantIdentifier<'ast>,
 }
 
@@ -125,7 +138,7 @@ impl<'ast> fmt::Display for CanonicalConstantIdentifier<'ast> {
 }
 
 impl<'ast> CanonicalConstantIdentifier<'ast> {
-    pub fn new(id: ConstantIdentifier<'ast>, module: OwnedTypedModuleId) -> Self {
+    pub fn new(id: ConstantIdentifier<'ast>, module: OwnedModuleId) -> Self {
         CanonicalConstantIdentifier { module, id }
     }
 }
@@ -176,7 +189,7 @@ impl<'ast, T: PartialEq> PartialEq<UExpression<'ast, T>> for DeclarationConstant
                     inner: UExpressionInner::Value(v),
                     ..
                 },
-            ) => *c == *v as u32,
+            ) => *c == v.value as u32,
             (DeclarationConstant::Expression(TypedExpression::Uint(e0)), e1) => e0 == e1,
             (DeclarationConstant::Expression(..), _) => false, // type error
             _ => true,
@@ -221,22 +234,22 @@ impl<'ast, T: fmt::Display> fmt::Display for DeclarationConstant<'ast, T> {
 
 impl<'ast, T> From<u32> for UExpression<'ast, T> {
     fn from(i: u32) -> Self {
-        UExpressionInner::Value(i as u128).annotate(UBitwidth::B32)
+        UExpressionInner::Value(ValueExpression::new(i as u128)).annotate(UBitwidth::B32)
     }
 }
 
-impl<'ast, T> From<DeclarationConstant<'ast, T>> for UExpression<'ast, T> {
+impl<'ast, T: Field> From<DeclarationConstant<'ast, T>> for UExpression<'ast, T> {
     fn from(c: DeclarationConstant<'ast, T>) -> Self {
         match c {
-            DeclarationConstant::Generic(i) => {
-                UExpressionInner::Identifier(i.name().into()).annotate(UBitwidth::B32)
+            DeclarationConstant::Generic(g) => {
+                UExpression::identifier(Identifier::from(CoreIdentifier::from(g)))
+                    .annotate(UBitwidth::B32)
             }
             DeclarationConstant::Concrete(v) => {
-                UExpressionInner::Value(v as u128).annotate(UBitwidth::B32)
+                UExpression::value(v as u128).annotate(UBitwidth::B32)
             }
             DeclarationConstant::Constant(v) => {
-                UExpressionInner::Identifier(CoreIdentifier::from(v).into())
-                    .annotate(UBitwidth::B32)
+                UExpression::identifier(FrameIdentifier::from(v).into()).annotate(UBitwidth::B32)
             }
             DeclarationConstant::Expression(e) => e.try_into().unwrap(),
         }
@@ -250,7 +263,7 @@ impl<'ast, T> TryInto<u32> for UExpression<'ast, T> {
         assert_eq!(self.bitwidth, UBitwidth::B32);
 
         match self.into_inner() {
-            UExpressionInner::Value(v) => Ok(v as u32),
+            UExpressionInner::Value(v) => Ok(v.value as u32),
             _ => Err(SpecializationError),
         }
     }
@@ -269,7 +282,7 @@ impl<'ast, T> TryInto<usize> for DeclarationConstant<'ast, T> {
 
 pub type MemberId = String;
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Debug, Clone, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct GStructMember<S> {
     #[serde(rename = "name")]
@@ -293,7 +306,7 @@ fn try_from_g_struct_member<T: TryInto<U>, U>(
 ) -> Result<GStructMember<U>, SpecializationError> {
     Ok(GStructMember {
         id: t.id,
-        ty: box try_from_g_type(*t.ty)?,
+        ty: Box::new(try_from_g_type(*t.ty)?),
     })
 }
 
@@ -311,7 +324,7 @@ impl<'ast, T> From<ConcreteStructMember> for StructMember<'ast, T> {
     }
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord, Debug)]
 pub struct GArrayType<S> {
     pub size: Box<S>,
@@ -359,8 +372,8 @@ fn try_from_g_array_type<T: TryInto<U>, U>(
     t: GArrayType<T>,
 ) -> Result<GArrayType<U>, SpecializationError> {
     Ok(GArrayType {
-        size: box (*t.size).try_into().map_err(|_| SpecializationError)?,
-        ty: box try_from_g_type(*t.ty)?,
+        size: Box::new((*t.size).try_into().map_err(|_| SpecializationError)?),
+        ty: Box::new(try_from_g_type(*t.ty)?),
     })
 }
 
@@ -378,7 +391,7 @@ impl<'ast, T> From<ConcreteArrayType> for ArrayType<'ast, T> {
     }
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord, Debug)]
 pub struct GTupleType<S> {
     pub elements: Vec<GType<S>>,
@@ -450,6 +463,42 @@ impl<S> TryFrom<GType<S>> for GTupleType<S> {
 
     fn try_from(t: GType<S>) -> Result<Self, Self::Error> {
         if let GType::Tuple(t) = t {
+            Ok(t)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<S> TryFrom<GType<S>> for GStructType<S> {
+    type Error = ();
+
+    fn try_from(t: GType<S>) -> Result<Self, Self::Error> {
+        if let GType::Struct(t) = t {
+            Ok(t)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<S> TryFrom<GType<S>> for GArrayType<S> {
+    type Error = ();
+
+    fn try_from(t: GType<S>) -> Result<Self, Self::Error> {
+        if let GType::Array(t) = t {
+            Ok(t)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<S> TryFrom<GType<S>> for UBitwidth {
+    type Error = ();
+
+    fn try_from(t: GType<S>) -> Result<Self, Self::Error> {
+        if let GType::Uint(t) = t {
             Ok(t)
         } else {
             Err(())
@@ -630,7 +679,7 @@ impl fmt::Display for UBitwidth {
     }
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum GType<S> {
     FieldElement,
@@ -808,8 +857,8 @@ impl<'ast, T> From<ConcreteType> for DeclarationType<'ast, T> {
 impl<S, U: Into<S>> From<(GType<S>, U)> for GArrayType<S> {
     fn from(tup: (GType<S>, U)) -> Self {
         GArrayType {
-            ty: box tup.0,
-            size: box tup.1.into(),
+            ty: Box::new(tup.0),
+            size: Box::new(tup.1.into()),
         }
     }
 }
@@ -817,8 +866,8 @@ impl<S, U: Into<S>> From<(GType<S>, U)> for GArrayType<S> {
 impl<S> GArrayType<S> {
     pub fn new<U: Into<S>>(ty: GType<S>, size: U) -> Self {
         GArrayType {
-            ty: box ty,
-            size: box size.into(),
+            ty: Box::new(ty),
+            size: Box::new(size.into()),
         }
     }
 }
@@ -887,6 +936,10 @@ impl<S> GType<S> {
     pub fn uint<W: Into<UBitwidth>>(b: W) -> Self {
         GType::Uint(b.into())
     }
+
+    pub fn is_empty_tuple(&self) -> bool {
+        matches!(self, GType::Tuple(ty) if ty.elements.is_empty())
+    }
 }
 
 impl<'ast, T: fmt::Display + PartialEq + fmt::Debug> Type<'ast, T> {
@@ -904,7 +957,7 @@ impl<'ast, T: fmt::Display + PartialEq + fmt::Debug> Type<'ast, T> {
                         match (&l.size.as_inner(), &*r.size) {
                             // compare the sizes for concrete ones
                             (UExpressionInner::Value(v), DeclarationConstant::Concrete(c)) => {
-                                (*v as u32) == *c
+                                (v.value as u32) == *c
                             }
                             _ => true,
                         }
@@ -952,7 +1005,7 @@ pub type FunctionIdentifier<'ast> = &'ast str;
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone, PartialOrd, Ord)]
 pub struct GFunctionKey<'ast, S> {
-    pub module: OwnedTypedModuleId,
+    pub module: OwnedModuleId,
     pub id: FunctionIdentifier<'ast>,
     pub signature: GSignature<S>,
 }
@@ -1030,7 +1083,7 @@ impl<'ast, T> From<ConcreteFunctionKey<'ast>> for DeclarationFunctionKey<'ast, T
 }
 
 impl<'ast, S> GFunctionKey<'ast, S> {
-    pub fn with_location<T: Into<OwnedTypedModuleId>, U: Into<FunctionIdentifier<'ast>>>(
+    pub fn with_location<T: Into<OwnedModuleId>, U: Into<FunctionIdentifier<'ast>>>(
         module: T,
         id: U,
     ) -> Self {
@@ -1051,7 +1104,7 @@ impl<'ast, S> GFunctionKey<'ast, S> {
         self
     }
 
-    pub fn module<T: Into<OwnedTypedModuleId>>(mut self, module: T) -> Self {
+    pub fn module<T: Into<OwnedModuleId>>(mut self, module: T) -> Self {
         self.module = module.into();
         self
     }
@@ -1084,7 +1137,7 @@ pub fn check_generic<'ast, T, S: Clone + PartialEq + PartialEq<u32>>(
             DeclarationConstant::Constant(..) => true,
             DeclarationConstant::Expression(e) => match e {
                 TypedExpression::Uint(e) => match e.as_inner() {
-                    UExpressionInner::Value(v) => *value == *v as u32,
+                    UExpressionInner::Value(v) => *value == v.value as u32,
                     _ => true,
                 },
                 _ => unreachable!(),
@@ -1127,10 +1180,9 @@ pub fn check_type<'ast, T, S: Clone + PartialEq + PartialEq<u32>>(
     }
 }
 
-impl<'ast, T> From<CanonicalConstantIdentifier<'ast>> for UExpression<'ast, T> {
+impl<'ast, T: Field> From<CanonicalConstantIdentifier<'ast>> for UExpression<'ast, T> {
     fn from(c: CanonicalConstantIdentifier<'ast>) -> Self {
-        UExpressionInner::Identifier(Identifier::from(CoreIdentifier::Constant(c)))
-            .annotate(UBitwidth::B32)
+        UExpression::identifier(Identifier::from(FrameIdentifier::from(c))).annotate(UBitwidth::B32)
     }
 }
 
@@ -1192,8 +1244,12 @@ pub fn specialize_declaration_type<
                     .into_iter()
                     .map(|m| {
                         let id = m.id;
-                        specialize_declaration_type(*m.ty, &inside_generics)
-                            .map(|ty| GStructMember { ty: box ty, id })
+                        specialize_declaration_type(*m.ty, &inside_generics).map(|ty| {
+                            GStructMember {
+                                ty: Box::new(ty),
+                                id,
+                            }
+                        })
                     })
                     .collect::<Result<_, _>>()?,
                 generics: s0
@@ -1215,6 +1271,9 @@ pub use self::signature::{
     try_from_g_signature, ConcreteSignature, DeclarationSignature, GSignature, Signature,
 };
 
+use super::identifier::FrameIdentifier;
+use super::{Expr, Id, ShadowedIdentifier};
+
 pub mod signature {
     use super::*;
     use std::fmt;
@@ -1231,7 +1290,7 @@ pub mod signature {
             Self {
                 generics: vec![],
                 inputs: vec![],
-                output: box GType::Tuple(GTupleType::new(vec![])),
+                output: Box::new(GType::Tuple(GTupleType::new(vec![]))),
             }
         }
     }
@@ -1282,7 +1341,7 @@ pub mod signature {
         }
     }
 
-    impl<'ast, T: Clone + PartialEq> DeclarationSignature<'ast, T> {
+    impl<'ast, T: Field> DeclarationSignature<'ast, T> {
         pub fn specialize(
             &self,
             values: Vec<Option<u32>>,
@@ -1380,7 +1439,7 @@ pub mod signature {
                 .into_iter()
                 .map(try_from_g_type)
                 .collect::<Result<_, _>>()?,
-            output: box try_from_g_type(*t.output)?,
+            output: Box::new(try_from_g_type(*t.output)?),
         })
     }
 

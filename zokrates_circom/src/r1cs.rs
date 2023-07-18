@@ -1,5 +1,5 @@
 use byteorder::{LittleEndian, WriteBytesExt};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::io::Result;
 use std::{io::Write, ops::Add};
 use zokrates_ast::flat::Variable;
@@ -65,43 +65,53 @@ pub fn r1cs_program<T: Field>(prog: Prog<T>) -> (Vec<Variable>, usize, Vec<Const
     // position where private part of witness starts
     let private_inputs_offset = variables.len();
 
+    // build a set of all variables
+    let mut ordered_variables_set = BTreeSet::default();
+
     // first pass through statements to populate `variables`
-    for (quad, lin) in prog.statements.iter().filter_map(|s| match s {
-        Statement::Constraint(quad, lin, _) => Some((quad, lin)),
+    for s in prog.statements.iter().filter_map(|s| match s {
+        Statement::Constraint(s) => Some(s),
         Statement::Directive(..) => None,
+        Statement::Block(..) => unreachable!(),
         Statement::Log(..) => None,
     }) {
-        for (k, _) in &quad.left.0 {
-            provide_variable_idx(&mut variables, k);
+        for (k, _) in &s.quad.left.value {
+            ordered_variables_set.insert(k);
         }
-        for (k, _) in &quad.right.0 {
-            provide_variable_idx(&mut variables, k);
+        for (k, _) in &s.quad.right.value {
+            ordered_variables_set.insert(k);
         }
-        for (k, _) in &lin.0 {
-            provide_variable_idx(&mut variables, k);
+        for (k, _) in &s.lin.value {
+            ordered_variables_set.insert(k);
         }
+    }
+
+    // create indices for the variables *in increasing order*
+    for variable in ordered_variables_set {
+        provide_variable_idx(&mut variables, variable);
     }
 
     let mut constraints = vec![];
 
     // second pass to convert program to raw sparse vectors
     for (quad, lin) in prog.statements.into_iter().filter_map(|s| match s {
-        Statement::Constraint(quad, lin, _) => Some((quad, lin)),
+        Statement::Block(..) => unreachable!(),
         Statement::Directive(..) => None,
         Statement::Log(..) => None,
+        Statement::Constraint(s) => Some((s.quad, s.lin)),
     }) {
         constraints.push((
             quad.left
-                .0
+                .value
                 .into_iter()
                 .map(|(k, v)| (*variables.get(&k).unwrap(), v))
                 .collect(),
             quad.right
-                .0
+                .value
                 .into_iter()
                 .map(|(k, v)| (*variables.get(&k).unwrap(), v))
                 .collect(),
-            lin.0
+            lin.value
                 .into_iter()
                 .map(|(k, v)| (*variables.get(&k).unwrap(), v))
                 .collect(),
@@ -279,13 +289,15 @@ mod tests {
     #[test]
     fn return_one() {
         let prog: Prog<Bn128Field> = Prog {
+            module_map: Default::default(),
             arguments: vec![],
             return_count: 1,
-            statements: vec![Statement::Constraint(
-                LinComb::one().into(),
-                Variable::public(0).into(),
+            statements: vec![Statement::constraint(
+                LinComb::one(),
+                Variable::public(0),
                 None,
             )],
+            solvers: vec![],
         };
 
         let mut buf = Vec::new();
@@ -335,26 +347,28 @@ mod tests {
     #[test]
     fn with_inputs() {
         let prog: Prog<Bn128Field> = Prog {
+            module_map: Default::default(),
             arguments: vec![
                 Parameter::private(Variable::new(0)),
                 Parameter::public(Variable::new(1)),
             ],
             return_count: 1,
             statements: vec![
-                Statement::Constraint(
-                    QuadComb::from_linear_combinations(
+                Statement::constraint(
+                    QuadComb::new(
                         LinComb::from(Variable::new(0)),
                         LinComb::from(Variable::new(0)),
                     ),
                     LinComb::from(Variable::new(0)),
                     None,
                 ),
-                Statement::Constraint(
-                    (LinComb::from(Variable::new(0)) + LinComb::from(Variable::new(1))).into(),
-                    Variable::public(0).into(),
+                Statement::constraint(
+                    LinComb::from(Variable::new(0)) + LinComb::from(Variable::new(1)),
+                    Variable::public(0),
                     None,
                 ),
             ],
+            solvers: vec![],
         };
 
         let mut buf = Vec::new();

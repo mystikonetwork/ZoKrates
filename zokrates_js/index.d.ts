@@ -1,4 +1,5 @@
 declare module "zokrates-js" {
+  export type Backend = "ark" | "bellman";
   export type Curve = "bn128" | "bls12_381" | "bls12_377" | "bw6_761";
   export type Scheme = "g16" | "gm17" | "marlin";
 
@@ -12,6 +13,7 @@ declare module "zokrates-js" {
 
   export interface CompileConfig {
     isolate_branches?: boolean;
+    debug?: boolean;
   }
 
   export interface CompileOptions {
@@ -32,12 +34,15 @@ declare module "zokrates-js" {
     location: string;
   }
 
+  export type LogCallback = (log: string) => void;
+
   export interface ComputeOptions {
     snarkjs?: boolean;
+    logCallback?: LogCallback;
   }
 
   export interface ComputationResult {
-    witness: string;
+    witness: Uint8Array;
     output: string;
     snarkjs?: {
       witness: Uint8Array;
@@ -55,6 +60,7 @@ declare module "zokrates-js" {
     snarkjs?: {
       program: Uint8Array;
     };
+    constraintCount?: number;
   }
 
   export interface SetupKeypair {
@@ -63,6 +69,7 @@ declare module "zokrates-js" {
   }
 
   export type Options = {
+    backend: Backend;
     scheme: Scheme;
     curve: Curve;
   };
@@ -78,13 +85,14 @@ declare module "zokrates-js" {
       args: any[],
       options?: ComputeOptions
     ): ComputationResult;
-    setup(program: Uint8Array): SetupKeypair;
-    universalSetup(size: number): Uint8Array;
+    setup(program: Uint8Array, entropy?: string): SetupKeypair;
+    universalSetup(size: number, entropy?: string): Uint8Array;
     setupWithSrs(srs: Uint8Array, program: Uint8Array): SetupKeypair;
     generateProof(
       program: Uint8Array,
-      witness: string,
-      provingKey: Uint8Array
+      witness: Uint8Array,
+      provingKey: Uint8Array,
+      entropy?: string
     ): Proof;
     verify(verificationKey: VerificationKey, proof: Proof): boolean;
     exportSolidityVerifier(verificationKey: VerificationKey): string;

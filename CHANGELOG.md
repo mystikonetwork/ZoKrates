@@ -4,6 +4,88 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 https://github.com/Zokrates/ZoKrates/compare/latest...develop
 
+## [0.8.7] - 2023-04-22
+
+### Release
+- https://github.com/Zokrates/ZoKrates/releases/tag/0.8.7 <!-- markdown-link-check-disable-line -->
+
+### Changes
+- Reduce memory usage of compilation (#1296, @schaeff)
+- Add initial support for the Nova proving scheme (#1235, @schaeff)
+
+## [0.8.6] - 2023-04-13
+
+### Release
+- https://github.com/Zokrates/ZoKrates/releases/tag/0.8.6 <!-- markdown-link-check-disable-line -->
+
+### Changes
+- Make ZoKrates build on stable rust (#1288, @schaeff)
+- Introduce sourcemaps, introduce `inspect` command to identify costly parts of the source (#1285, @schaeff)
+- Change witness format to binary, optimize backend integration code to improve proving time (#1289, @dark64)
+- Fixed precedence issue on Sudoku example. (#1287, @Turupawn)
+- Reduce compiled program size by deduplicating assembly solvers (#1268, @dark64)
+
+## [0.8.5] - 2023-03-28
+
+### Release
+- https://github.com/Zokrates/ZoKrates/releases/tag/0.8.5 <!-- markdown-link-check-disable-line -->
+
+### Changes
+- Reduce memory usage and runtime by refactoring the reducer (ssa, propagation, unrolling and inlining) (#1283, @schaeff)
+- Fix `radix-path` help message on `mpc init` subcommand (#1280, @dark64)
+- Fix a potential crash in `zokrates-js` due to inefficient serialization of a setup keypair (#1277, @dark64)
+- Show help when running `zokrates mpc` (#1275, @dark64)
+
+## [0.8.4] - 2023-01-31
+
+### Release
+- https://github.com/Zokrates/ZoKrates/releases/tag/0.8.4 <!-- markdown-link-check-disable-line -->
+
+### Changes
+- Fix array propagation for spreads and repeaters (#1269, @schaeff)
+- Remove solc dependency for tests, use foundry instead (#1266, @schaeff)
+- Optimize `zokrates-js` library size (#1264, @dark64)
+- Use multicore feature in ark and bellman to improve performance (#1261, @dark64)
+- Allow user-provided randomness in setup and proof generation (#1254, @dark64)
+- Fix typos (#1260, @rex4539)
+- Introduce constraint generation through assembly blocks (#1246, @dark64)
+- Loosen up whitespace restrictions to allow more formatting styles (#1232, @dark64)
+- Reduce cost of boolean array equality checks (#1228, @schaeff)
+
+## [0.8.3] - 2022-10-11
+
+### Release
+- https://github.com/Zokrates/ZoKrates/releases/tag/0.8.3 <!-- markdown-link-check-disable-line -->
+
+### Changes
+- Disallow the use of the `private` and `public` keywords on non-entrypoint functions (#1224, @dark64)
+- Fix duplicate constraint optimiser (#1226, @schaeff)
+
+## [0.8.2] - 2022-09-05
+
+### Release
+- https://github.com/Zokrates/ZoKrates/releases/tag/0.8.2 <!-- markdown-link-check-disable-line -->
+
+### Changes
+- Make return statement optional if no returns are expected (#1222, @dark64)
+- Add a casting utility module to stdlib (#1215, @dark64)
+- Introduce dead code elimination (#1206, @schaeff)
+- Add magic square in javascript example to the book (#1198, @dark64)
+- Fix circom r1cs export to avoid generating unverified proofs (#1220, @schaeff)
+- Allow shadowing (#1193, @schaeff)
+
+## [0.8.1] - 2022-08-22
+
+### Release
+- https://github.com/Zokrates/ZoKrates/releases/tag/0.8.1 <!-- markdown-link-check-disable-line -->
+
+### Changes
+- Error out at compile time if the type of a logged value could not be inferred (#1209, @dark64)
+- Add `backend` option in `zokrates-js`, bring back bellman, add a log writer to support printing logs in js (#1199, @dark64)
+- Fix padding bug in keccak implementation, add support for keccak-224 and sha3-224 (#1197, @dark64)
+- Update syntax highlighters (#1195, @schaeff)
+- Avoid validity checks on the deserialization of the proving key to improve proving time (#1192, @dark64)
+
 ## [0.8.0] - 2022-07-07
 
 ### Release

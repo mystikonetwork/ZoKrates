@@ -1,5 +1,7 @@
+use crate::common::SourceMetadata;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::fmt::Write;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum RuntimeError {
@@ -16,18 +18,17 @@ pub enum RuntimeError {
     BranchIsolation,
     ConstantLtBitness,
     ConstantLtSum,
-    LtBitness,
-    LtSum,
-    LtFinalBitness,
     LtFinalSum,
     LtSymetric,
     Or,
     Xor,
+    IncompleteDynamicRange,
     Inverse,
     Euclidean,
     ShaXor,
     Division,
-    SourceAssertion(String),
+    SourceAssertion(SourceMetadata),
+    SourceAssemblyConstraint(SourceMetadata),
     ArgumentBitness,
     SelectRangeCheck,
 }
@@ -35,8 +36,14 @@ pub enum RuntimeError {
 impl From<crate::zir::RuntimeError> for RuntimeError {
     fn from(error: crate::zir::RuntimeError) -> Self {
         match error {
-            crate::zir::RuntimeError::SourceAssertion(s) => RuntimeError::SourceAssertion(s),
+            crate::zir::RuntimeError::SourceAssertion(metadata) => {
+                RuntimeError::SourceAssertion(metadata)
+            }
             crate::zir::RuntimeError::SelectRangeCheck => RuntimeError::SelectRangeCheck,
+            crate::zir::RuntimeError::DivisionByZero => RuntimeError::Inverse,
+            crate::zir::RuntimeError::IncompleteDynamicRange => {
+                RuntimeError::IncompleteDynamicRange
+            }
         }
     }
 }
@@ -47,7 +54,12 @@ impl RuntimeError {
 
         !matches!(
             self,
-            SourceAssertion(_) | Inverse | LtSum | SelectRangeCheck | ArgumentBitness
+            SourceAssemblyConstraint(_)
+                | SourceAssertion(_)
+                | Inverse
+                | SelectRangeCheck
+                | ArgumentBitness
+                | IncompleteDynamicRange
         )
     }
 }
@@ -56,6 +68,7 @@ impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use RuntimeError::*;
 
+        let mut buf = String::new();
         let msg = match self {
             BellmanConstraint => "Bellman constraint is unsatisfied",
             BellmanOneBinding => "Bellman ~one binding is unsatisfied",
@@ -70,18 +83,25 @@ impl fmt::Display for RuntimeError {
             BranchIsolation => "Branch isolation failed",
             ConstantLtBitness => "Bitness check failed in constant Lt check",
             ConstantLtSum => "Sum check failed in constant Lt check",
-            LtBitness => "Bitness check failed in Lt check",
-            LtSum => "Sum check failed in Lt check",
-            LtFinalBitness => "Bitness check failed in final Lt check",
             LtFinalSum => "Sum check failed in final Lt check",
             LtSymetric => "Symetrical check failed in Lt check",
             Or => "Or check failed",
             Xor => "Xor check failed",
+            IncompleteDynamicRange => {
+                "Failed to compare field elements because dynamic comparison is incomplete"
+            }
             Inverse => "Division by zero",
             Euclidean => "Euclidean check failed",
             ShaXor => "Internal Sha check failed",
             Division => "Division check failed",
-            SourceAssertion(m) => m.as_str(),
+            SourceAssertion(m) => {
+                write!(&mut buf, "Assertion failed at {}", m).unwrap();
+                buf.as_str()
+            }
+            SourceAssemblyConstraint(m) => {
+                write!(&mut buf, "Unsatisfied constraint at {}", m).unwrap();
+                buf.as_str()
+            }
             ArgumentBitness => "Argument bitness check failed",
             SelectRangeCheck => "Out of bounds array access",
         };

@@ -80,6 +80,7 @@ fn cli_export_verifier<T: SolidityCompatibleField, S: SolidityCompatibleScheme<T
 
     let vk = serde_json::from_value(vk).map_err(|why| format!("{}", why))?;
 
+    // modify begin
     let (pairing, verifier, verifier_lib) = S::export_solidity_verifier(vk);
 
     //write output file
@@ -130,5 +131,6 @@ fn cli_export_verifier<T: SolidityCompatibleField, S: SolidityCompatibleScheme<T
         .map_err(|_| "Failed writing verifier output to file".to_string())?;
 
     println!("Verifier exported to '{}'", verifier_output_path.display());
+    // modify end
     Ok(())
 }
